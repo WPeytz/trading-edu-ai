@@ -1,0 +1,1 @@
+# trading-edu-ai
