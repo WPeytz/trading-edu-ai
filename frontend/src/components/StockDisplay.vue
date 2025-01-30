@@ -1,96 +1,228 @@
 <template>
-    <div class="stock-container">
-      <h2>Stock Price Lookup</h2>
-  
-      <input v-model="ticker" placeholder="Enter stock symbol (e.g., AAPL)" />
+  <div class="stock-container">
+    <h2>Stock Price Lookup</h2>
+
+    <div class="input-group">
+      <input v-model="tickers" placeholder="Enter symbols (e.g., AAPL, TSLA, GOOG)" />
       <button @click="fetchStockData">Get Stock Data</button>
-  
-      <div v-if="stockData">
-        <h3>{{ stockData.ticker }} Stock Data</h3>
-        <p><strong>Last Price:</strong> ${{ stockData.last_price }}</p>
-        <p><strong>Open Price:</strong> ${{ stockData.open_price }}</p>
-        <p><strong>High Price:</strong> ${{ stockData.high_price }}</p>
-        <p><strong>Low Price:</strong> ${{ stockData.low_price }}</p>
-        <p><strong>Volume:</strong> {{ stockData.volume }}</p>
-      </div>
-  
-      <p v-if="error" class="error">{{ error }}</p>
     </div>
-  </template>
-  
-  <script>
-  import axios from "axios";
-  
-  export default {
-    data() {
-      return {
-        ticker: "",
-        stockData: null,
-        error: null,
-      };
-    },
-    methods: {
-      async fetchStockData() {
-        if (!this.ticker) {
-          this.error = "Please enter a stock ticker symbol.";
-          return;
-        }
-  
-        this.error = null;
-        this.stockData = null;
-  
-        try {
-          const response = await axios.get(`http://127.0.0.1:8000/stock/${this.ticker}`);
+
+    <div v-if="Object.keys(stockData).length" class="stocks-grid">
+      <div v-for="(data, ticker) in stockData" :key="ticker" class="stock-card">
+        <h3>{{ ticker }} Stock</h3>
+        <p>
+          <strong>Last Price:</strong>
+          <span
+            :class="[getPriceChangeClass(ticker), 'price-value']"
+            :key="data.last_price"
+          >
+            ${{ data.last_price }}
+            <span v-if="priceChanges[ticker] !== null">
+              ({{ priceChanges[ticker] > 0 ? '▲' : '▼' }} {{ Math.abs(priceChanges[ticker]).toFixed(2) }})
+            </span>
+          </span>
+        </p>
+        <p><strong>Open Price:</strong> ${{ data.open_price }}</p>
+        <p><strong>High Price:</strong> ${{ data.high_price }}</p>
+        <p><strong>Low Price:</strong> ${{ data.low_price }}</p>
+        <p><strong>Volume:</strong> {{ data.volume }}</p>
+      </div>
+    </div>
+
+    <p v-if="error" class="error">{{ error }}</p>
+  </div>
+</template>
+
+<script>
+import axios from "axios";
+
+export default {
+  data() {
+    return {
+      tickers: "",
+      stockData: {},
+      previousPrices: {}, // Stores last known prices
+      priceChanges: {}, // Stores price differences
+      error: null,
+      refreshInterval: null,
+    };
+  },
+  methods: {
+    async fetchStockData() {
+      if (!this.tickers) {
+        this.error = "Please enter at least one stock ticker symbol.";
+        return;
+      }
+
+      this.error = null;
+
+      try {
+        console.log(`Fetching data for: ${this.tickers}`); // Debugging
+        const response = await axios.get(`http://127.0.0.1:8000/stocks/?tickers=${this.tickers}`);
+        
+        console.log("API Response:", response.data); // Debugging
+        
+        if (!response.data) {
+          this.error = "No data received.";
+        } else {
+          // Update price changes and trigger animations
+          Object.keys(response.data).forEach((ticker) => {
+            const newPrice = response.data[ticker].last_price;
+            if (this.previousPrices[ticker] !== undefined) {
+              this.priceChanges[ticker] = newPrice - this.previousPrices[ticker];
+            }
+            this.previousPrices[ticker] = newPrice;
+          });
+
           this.stockData = response.data;
-          
-          if (response.data.error) {
-            this.error = response.data.error;
-            this.stockData = null;
-          }
-        } catch (err) {
-          this.error = "Failed to fetch stock data. Please try again.";
         }
-      },
+      } catch (err) {
+        console.error("API Error:", err);
+        this.error = "Failed to fetch stock data. Please try again.";
+      }
     },
-  };
-  </script>
-  
-  <style scoped>
-    .stock-container {
-    max-width: 400px;
-    margin: auto;
-    text-align: center;
-    padding: 20px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background-color: #f9f9f9;
-    color: black; /* Ensures all text is visible */
-    }
+    startAutoRefresh() {
+      if (this.refreshInterval) {
+        clearInterval(this.refreshInterval);
+      }
 
-    h3, p {
-    color: black !important; /* Force visibility */
+      this.refreshInterval = setInterval(() => {
+        console.log("Auto-refreshing stock data...");
+        this.fetchStockData();
+      }, 60000);
+    },
+    getPriceChangeClass(ticker) {
+      if (!this.priceChanges[ticker]) return "";
+      return this.priceChanges[ticker] > 0 ? "price-up" : "price-down";
     }
+  },
+  watch: {
+    tickers(newTickers) {
+      if (newTickers) {
+        this.startAutoRefresh();
+      }
+    }
+  },
+  mounted() {
+    this.startAutoRefresh();
+  },
+  beforeUnmount() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+    }
+  }
+};
+</script>
 
-  input {
-    width: 80%;
-    padding: 8px;
-    margin: 10px 0;
-  }
-  
-  button {
-    background-color: #007bff;
-    color: white;
-    padding: 10px;
-    border: none;
-    cursor: pointer;
-  }
-  
-  button:hover {
-    background-color: #0056b3;
-  }
-  
-  .error {
-    color: red;
-    font-weight: bold;
-  }
-  </style>
+<style scoped>
+/* Container Styling */
+.stock-container {
+  max-width: 800px;
+  margin: auto;
+  text-align: center;
+  padding: 20px;
+  border-radius: 10px;
+  background-color: #222;
+  color: white;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Input Group */
+.input-group {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+input {
+  width: 60%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background-color: #333;
+  color: white;
+}
+
+/* Button Styling */
+button {
+  background-color: #007bff;
+  color: white;
+  padding: 10px 15px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: 0.3s ease-in-out;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+/* Stocks Grid */
+.stocks-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  justify-content: center;
+}
+
+/* Stock Card */
+.stock-card {
+  background-color: #333;
+  padding: 15px;
+  border-radius: 8px;
+  width: 250px;
+  text-align: left;
+  box-shadow: 0px 2px 5px rgba(255, 255, 255, 0.1);
+}
+
+h3 {
+  text-align: center;
+  color: #ffcc00;
+  margin-bottom: 10px;
+}
+
+p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #ddd;
+}
+
+/* Price Change Colors & Animations */
+.price-value {
+  transition: color 0.5s ease-in-out;
+}
+
+.price-up {
+  color: #00ff00; /* Green for price increase */
+  font-weight: bold;
+  animation: pulse-green 0.5s ease-in-out;
+}
+
+.price-down {
+  color: #ff3333; /* Red for price decrease */
+  font-weight: bold;
+  animation: pulse-red 0.5s ease-in-out;
+}
+
+/* Green Pulse Animation */
+@keyframes pulse-green {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); color: #66ff66; }
+  100% { transform: scale(1); }
+}
+
+/* Red Pulse Animation */
+@keyframes pulse-red {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); color: #ff6666; }
+  100% { transform: scale(1); }
+}
+
+.error {
+  color: red;
+  font-weight: bold;
+  margin-top: 15px;
+}
+</style>

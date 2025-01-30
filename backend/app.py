@@ -17,25 +17,32 @@ app.add_middleware(
 def read_root():
     return {"message": "Trading AI backend with CORS enabled is running!"}
 
-@app.get("/stock/{ticker}")
-def get_stock_data(ticker: str):
+@app.get("/stocks/")
+def get_multiple_stock_data(tickers: str):
     """
-    Fetches stock data from Yahoo Finance.
+    Fetches stock data for multiple tickers (comma-separated).
+    Example: /stocks/?tickers=AAPL,TSLA,GOOG
     """
     try:
-        stock = yf.Ticker(ticker)
-        data = stock.history(period="1d")
+        ticker_list = tickers.split(",")  # Convert comma-separated string to a list
+        stock_data = {}
 
-        if data.empty:
-            return {"error": "Invalid ticker symbol or no data available"}
+        for ticker in ticker_list:
+            stock = yf.Ticker(ticker.strip())  # Remove spaces
+            data = stock.history(period="1d")
 
-        return {
-            "ticker": ticker.upper(),
-            "last_price": round(data["Close"].iloc[-1], 2),
-            "open_price": round(data["Open"].iloc[-1], 2),
-            "high_price": round(data["High"].iloc[-1], 2),
-            "low_price": round(data["Low"].iloc[-1], 2),
-            "volume": int(data["Volume"].iloc[-1])
-        }
+            if data.empty:
+                stock_data[ticker] = {"error": "Invalid ticker symbol or no data available"}
+            else:
+                stock_data[ticker] = {
+                    "ticker": ticker.upper(),
+                    "last_price": round(data["Close"].iloc[-1], 2),
+                    "open_price": round(data["Open"].iloc[-1], 2),
+                    "high_price": round(data["High"].iloc[-1], 2),
+                    "low_price": round(data["Low"].iloc[-1], 2),
+                    "volume": int(data["Volume"].iloc[-1])
+                }
+
+        return stock_data
     except Exception as e:
         return {"error": str(e)}
