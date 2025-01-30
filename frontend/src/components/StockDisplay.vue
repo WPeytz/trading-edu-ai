@@ -5,6 +5,7 @@
     <div class="input-group">
       <input v-model="tickers" placeholder="Enter symbols (e.g., AAPL, TSLA, GOOG)" />
       <button @click="fetchStockData">Get Stock Data</button>
+      <button @click="saveFavorites">Save Favorites</button>
     </div>
 
     <div v-if="Object.keys(stockData).length" class="stocks-grid">
@@ -39,10 +40,10 @@ import axios from "axios";
 export default {
   data() {
     return {
-      tickers: "",
-      stockData: {},
-      previousPrices: {}, // Stores last known prices
-      priceChanges: {}, // Stores price differences
+      tickers: "", // User input
+      stockData: {}, // Stores stock data
+      previousPrices: {}, // Tracks previous prices for change comparison
+      priceChanges: {}, // Tracks price differences
       error: null,
       refreshInterval: null,
     };
@@ -65,7 +66,7 @@ export default {
         if (!response.data) {
           this.error = "No data received.";
         } else {
-          // Update price changes and trigger animations
+          // Update price changes
           Object.keys(response.data).forEach((ticker) => {
             const newPrice = response.data[ticker].last_price;
             if (this.previousPrices[ticker] !== undefined) {
@@ -94,6 +95,17 @@ export default {
     getPriceChangeClass(ticker) {
       if (!this.priceChanges[ticker]) return "";
       return this.priceChanges[ticker] > 0 ? "price-up" : "price-down";
+    },
+    saveFavorites() {
+      localStorage.setItem("favoriteStocks", this.tickers);
+      alert("Saved favorite stocks!");
+    },
+    loadFavorites() {
+      const savedTickers = localStorage.getItem("favoriteStocks");
+      if (savedTickers) {
+        this.tickers = savedTickers;
+        this.fetchStockData(); // Load data on startup
+      }
     }
   },
   watch: {
@@ -104,6 +116,7 @@ export default {
     }
   },
   mounted() {
+    this.loadFavorites(); // Load favorite stocks when component loads
     this.startAutoRefresh();
   },
   beforeUnmount() {
@@ -136,7 +149,7 @@ export default {
 }
 
 input {
-  width: 60%;
+  width: 50%;
   padding: 10px;
   border: 1px solid #ccc;
   border-radius: 5px;
